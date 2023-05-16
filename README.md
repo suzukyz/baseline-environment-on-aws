@@ -243,6 +243,21 @@ This sets up the following features
 - Create an SNS topic (SecurityAlarmTopic) to notify security events
 - Send emails and send notifications to Slack's secure channels via the above SNS topics
 
+##### （Option） Preparing for CloudTrail Lake
+
+CloudTrail で収集しているイベントデータを SQL ベースのクエリで検索することのできる、CloudTrail Lake という機能があります。
+これを用いてイベントデータを検索したい場合、EventDataStore を作成しておく必要があります。
+デプロイ前に、以下のように Stack のパラメータを変更しておくことで、CloudTrail の有効化と同時に、EventDataStore を作成することができます。
+There is a feature called CloudTrail Lake that allows you to search event data collected by CloudTrail with SQL-based queries.
+If you want to search event data using this, you'll need to create an EventDataStore on CloudTrail.
+Before deployment, you can create an EventDataStore at the same time as enabling CloudTrail by changing the stack parameters as shown below.
+
+```
+// usecases/blea-gov-base-ct/lib/stack/blea-gov-base-ct-stack.ts
+// Or, usecases/blea-gov-base-standalone/lib/stack/blea-gov-base-standalone.ts
+const logging = new Logging(this, 'Logging', {enableCloudTrailEventDataStore: true});
+```
+
 #### 4-3. (Optional) Set up other baseline setups manually
 
 In addition to setting up on a governance basis, AWS provides several operational baseline services. Please set up these services as needed.

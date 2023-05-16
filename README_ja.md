@@ -238,6 +238,18 @@ npx aws-cdk deploy --all --profile prof_dev
 - セキュリティイベントを通知する SNS トピック (SecurityAlarmTopic) の作成
 - 上記 SNS トピックを経由した、メールの送信と Slack のセキュリティチャネルへの通知
 
+##### （オプション） CloudTrail Lake を利用するための準備
+
+CloudTrail で収集しているイベントデータを SQL ベースのクエリで検索することのできる、CloudTrail Lake という機能があります。
+これを用いてイベントデータを検索したい場合、EventDataStore を作成しておく必要があります。
+デプロイ前に、以下のように Stack のパラメータを変更しておくことで、CloudTrail の有効化と同時に、EventDataStore を作成することができます。
+
+```
+// usecases/blea-gov-base-ct/lib/stack/blea-gov-base-ct-stack.ts
+// または、usecases/blea-gov-base-standalone/lib/stack/blea-gov-base-standalone.ts
+const logging = new Logging(this, 'Logging', {enableCloudTrailEventDataStore: true});
+```
+
 #### 4-3. (オプション) 他のベースラインセットアップを手動でセットアップする
 
 ガバナンスベースでセットアップする他に AWS はいくつかの運用上のベースラインサービスを提供しています。必要に応じてこれらのサービスのセットアップを行なってください。
