@@ -9,10 +9,14 @@ import {
 } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 
+interface LoggingProps {
+  enableCloudTrailEventDataStore?: boolean;
+}
+
 export class Logging extends Construct {
   public readonly trailLogGroup: cwl.LogGroup;
 
-  constructor(scope: Construct, id: string) {
+  constructor(scope: Construct, id: string, props?: LoggingProps) {
     super(scope, id);
 
     // === AWS CloudTrail ===
@@ -120,6 +124,13 @@ export class Logging extends Construct {
       encryptionKey: cloudTrailKey,
       sendToCloudWatchLogs: true,
     });
+
+    // If you want to use CloudTrail Lake, you should give true to props.enableCloudTrailEventDataStore
+    if (props && props.enableCloudTrailEventDataStore) {
+      new trail.CfnEventDataStore(this, 'CloudTrailEventDataStore', {
+        multiRegionEnabled: true,
+      });
+    }
 
     // === AWS Config ===
     const configRole = new iam.Role(this, 'ConfigRole', {

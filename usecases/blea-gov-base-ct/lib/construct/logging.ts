@@ -10,13 +10,13 @@ import {
 import { Construct } from 'constructs';
 
 interface LoggingProps {
-  enableCloudTrailLake?: boolean;
+  enableCloudTrailEventDataStore?: boolean;
 }
 
 export class Logging extends Construct {
   public readonly trailLogGroup: cwl.LogGroup;
 
-  constructor(scope: Construct, id: string, props: LoggingProps) {
+  constructor(scope: Construct, id: string, props?: LoggingProps) {
     super(scope, id);
 
     // === AWS CloudTrail ===
@@ -125,8 +125,8 @@ export class Logging extends Construct {
       sendToCloudWatchLogs: true,
     });
 
-    // CloudTrail Lake
-    if (props.enableCloudTrailLake) {
+    // If you want to use CloudTrail Lake, you should give true to props.enableCloudTrailEventDataStore
+    if (props && props.enableCloudTrailEventDataStore) {
       new trail.CfnEventDataStore(this, 'CloudTrailEventDataStore', {
         multiRegionEnabled: true,
       });
