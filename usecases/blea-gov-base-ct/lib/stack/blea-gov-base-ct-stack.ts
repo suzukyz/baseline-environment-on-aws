@@ -9,6 +9,7 @@ export interface BLEAGovBaseCtStackProps extends StackProps {
   securityNotifyEmail: string;
   securitySlackWorkspaceId?: string;
   securitySlackChannelId?: string;
+  additionalTrail?: boolean;
 }
 
 export class BLEAGovBaseCtStack extends Stack {
@@ -20,14 +21,18 @@ export class BLEAGovBaseCtStack extends Stack {
     // AWS CloudTrail configuration in Control Tower Landing Zone v3.0 will not create CloudWatch Logs LogGroup in each Guest Accounts.
     // And it will delete these LogGroups when AWS CloudTrial Configuration is disabled in case of updating Landing Zone version from older one.
     // BLEA should notify their alarms continuously. So, if there is no CloudTrail and CloudWatch Logs in Guest Account, BLEA creates them to notify the Alarms.
-    const logging = new Logging(this, 'Logging');
+    let logging
+    if (props.additionalTrail) {
+      logging = new Logging(this, 'Logging');
+    }
 
     // Security Alarms
     // !!! Need to setup SecurityHub, GuardDuty manually on Organizations Management account
     // AWS Config and CloudTrail are set up by Control Tower
     const detection = new Detection(this, 'Detection', {
       notifyEmail: props.securityNotifyEmail,
-      cloudTrailLogGroupName: logging.trailLogGroup.logGroupName,
+      cloudTrailLogGroupName: logging ? logging.trailLogGroup.logGroupName : undefined,
+      additionalTrail: props.additionalTrail,
     });
 
     if (!props.securitySlackWorkspaceId || !props.securitySlackChannelId) {
