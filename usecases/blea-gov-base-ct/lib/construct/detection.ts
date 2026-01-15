@@ -10,9 +10,320 @@ import { aws_logs as cwl } from 'aws-cdk-lib';
 import { aws_events_targets as cwet } from 'aws-cdk-lib';
 import { ITopic } from 'aws-cdk-lib/aws-sns';
 
+interface MetricGenerationStrategy {
+  createMetricsAndAlarms(scope: Construct, topic: ITopic): void;
+}
+
+// This class is used in case of parameter.additionalTrail is true.
+class CloudTrailMetricStrategy implements MetricGenerationStrategy {
+  constructor(private readonly logGroup: cwl.ILogGroup) {}
+  
+  createMetricsAndAlarms(scope: Construct, topic: ITopic): void {
+    // IAM Policy Change
+    this.createMetricFilterAndAlarm(
+      scope,
+      'IAMPolicyChange',
+      {
+        logPatternString: '{($.eventName=DeleteGroupPolicy)||($.eventName=DeleteRolePolicy)||($.eventName=DeleteUserPolicy)||($.eventName=PutGroupPolicy)||($.eventName=PutRolePolicy)||($.eventName=PutUserPolicy)||($.eventName=CreatePolicy)||($.eventName=DeletePolicy)||($.eventName=CreatePolicyVersion)||($.eventName=DeletePolicyVersion)||($.eventName=AttachRolePolicy)||($.eventName=DetachRolePolicy)||($.eventName=AttachUserPolicy)||($.eventName=DetachUserPolicy)||($.eventName=AttachGroupPolicy)||($.eventName=DetachGroupPolicy)}',
+      },
+      'CloudTrailMetrics',
+      'IAMPolicyEventCount',
+      '1',
+      {
+        evaluationPeriods: 1,
+        datapointsToAlarm: 1,
+        threshold: 1,
+        alarmDescription: 'IAM Configuration changes detected!',
+      },
+      topic
+    );
+    
+    // Unauthorized Attempts
+    this.createMetricFilterAndAlarm(
+      scope,
+      'UnauthorizedAttempts',
+      {
+        logPatternString: '{($.errorCode = "*UnauthorizedOperation" || $.errorCode = "AccessDenied*") && ($.eventName != "Decrypt" || $.userIdentity.invokedBy != "config.amazonaws.com" )}',
+      },
+      'CloudTrailMetrics',
+      'UnauthorizedAttemptsEventCount',
+      '1',
+      {
+        evaluationPeriods: 1,
+        datapointsToAlarm: 1,
+        threshold: 5,
+        alarmDescription: 'Multiple unauthorized actions or logins attempted!',
+      },
+      topic
+    );
+    
+    // New Access Key Created
+    this.createMetricFilterAndAlarm(
+      scope,
+      'NewAccessKeyCreated',
+      {
+        logPatternString: '{($.eventName=CreateAccessKey)}',
+      },
+      'CloudTrailMetrics',
+      'NewAccessKeyCreatedEventCount',
+      '1',
+      {
+        evaluationPeriods: 1,
+        datapointsToAlarm: 1,
+        threshold: 1,
+        alarmDescription: 'Warning: New IAM access key was created. Please be sure this action was necessary.',
+      },
+      topic
+    );
+    
+    // Root User Activity
+    this.createMetricFilterAndAlarm(
+      scope,
+      'RootUserActivity',
+      {
+        logPatternString: '{$.userIdentity.type="Root" && $.userIdentity.invokedBy NOT EXISTS && $.eventType !="AwsServiceEvent"}',
+      },
+      'CloudTrailMetrics',
+      'RootUserPolicyEventCount',
+      '1',
+      {
+        evaluationPeriods: 1,
+        datapointsToAlarm: 1,
+        threshold: 1,
+        alarmDescription: 'Root user activity detected!',
+      },
+      topic
+    );
+  }
+  
+  private createMetricFilterAndAlarm(
+    scope: Construct,
+    id: string,
+    filterPattern: cwl.IFilterPattern,
+    metricNamespace: string,
+    metricName: string,
+    metricValue: string,
+    alarmProps: {
+      evaluationPeriods: number;
+      datapointsToAlarm: number;
+      threshold: number;
+      alarmDescription: string;
+    },
+    topic: ITopic
+  ): void {
+    const metricFilter = new cwl.MetricFilter(scope, `${id}Filter`, {
+      logGroup: this.logGroup,
+      filterPattern: filterPattern,
+      metricNamespace: metricNamespace,
+      metricName: metricName,
+      metricValue: metricValue,
+    });
+    
+    new cw.Alarm(scope, `${id}Alarm`, {
+      metric: metricFilter.metric({
+        period: cdk.Duration.seconds(300),
+        statistic: cw.Stats.SUM,
+      }),
+      evaluationPeriods: alarmProps.evaluationPeriods,
+      datapointsToAlarm: alarmProps.datapointsToAlarm,
+      threshold: alarmProps.threshold,
+      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      alarmDescription: alarmProps.alarmDescription,
+      actionsEnabled: true,
+    }).addAlarmAction(new cwa.SnsAction(topic));
+  }
+}
+
+// This class is used in case of parameter.additionalTrail is false.
+class EventBridgeMetricStrategy implements MetricGenerationStrategy {
+  createMetricsAndAlarms(scope: Construct, topic: ITopic): void {
+    // IAM Policy Change
+    this.createEventRuleWithMetricAndAlarm(
+      scope,
+      'IAMPolicyChange',
+      'Notify to change on IAM policy',
+      {
+        detailType: ['AWS API Call via CloudTrail'],
+        detail: {
+          eventSource: ['iam.amazonaws.com'],
+          eventName: ['DeleteGroupPolicy', 'DeleteRolePolicy', 'DeleteUserPolicy', 'PutGroupPolicy', 'PutRolePolicy', 'PutUserPolicy', 'CreatePolicy', 'DeletePolicy', 'CreatePolicyVersion', 'DeletePolicyVersion', 'AttachRolePolicy', 'DetachRolePolicy', 'AttachUserPolicy', 'DetachUserPolicy', 'AttachGroupPolicy', 'DetachGroupPolicy'],
+        },
+      },
+      'CloudTrailMetrics',
+      'IAMPolicyEventCount',
+      {
+        evaluationPeriods: 1,
+        datapointsToAlarm: 1,
+        threshold: 1,
+        alarmDescription: 'IAM Configuration changes detected!',
+      },
+      topic
+    );
+    
+    // Unauthorized Attempts
+    this.createEventRuleWithMetricAndAlarm(
+      scope,
+      'UnauthorizedAttempts',
+      'Notify unauthorized operations',
+      {
+        detailType: ['AWS API Call via CloudTrail'],
+        detail: {
+          errorCode: [{ wildcard: '*UnauthorizedOperation' }, { wildcard: 'AccessDenied*' }],
+          "$or": [
+            { eventName: [{'anything-but': 'Decrypt' }]},
+            { 
+              userIdentity: {
+                invokedBy: [{'anything-but': 'config.amazonaws.com' }]
+              },
+            }
+          ]
+        },
+      },
+      'CloudTrailMetrics',
+      'UnauthorizedAttemptsEventCount',
+      {
+        evaluationPeriods: 1,
+        datapointsToAlarm: 1,
+        threshold: 5,
+        alarmDescription: 'Multiple unauthorized actions or logins attempted!',
+      },
+      topic
+    );
+    
+    // New Access Key Created
+    this.createEventRuleWithMetricAndAlarm(
+      scope,
+      'NewAccessKeyCreated',
+      'Notify when a new IAM access key is created',
+      {
+        detailType: ['AWS API Call via CloudTrail'],
+        detail: {
+          eventSource: ['iam.amazonaws.com'],
+          eventName: ['CreateAccessKey'],
+        },
+      },
+      'CloudTrailMetrics',
+      'NewAccessKeyCreatedEventCount',
+      {
+        evaluationPeriods: 1,
+        datapointsToAlarm: 1,
+        threshold: 1,
+        alarmDescription: 'Warning: New IAM access key was created. Please be sure this action was necessary.',
+      },
+      topic
+    );
+    
+    // Root User Activity
+    this.createEventRuleWithMetricAndAlarm(
+      scope,
+      'RootUserActivity',
+      'Notify when root user activity is detected',
+      {
+        detailType: ['AWS API Call via CloudTrail'],
+        detail: {
+          userIdentity: {
+            type: ['Root'],
+            invokedBy: [{ exists: false }]
+          },
+          eventType: [{'anything-but': 'AwsServiceEvent'}]
+        },
+      },
+      'CloudTrailMetrics',
+      'RootUserPolicyEventCount',
+      {
+        evaluationPeriods: 1,
+        datapointsToAlarm: 1,
+        threshold: 1,
+        alarmDescription: 'Root user activity detected!',
+      },
+      topic
+    );
+  }
+  
+  private createEventRuleWithMetricAndAlarm(
+    scope: Construct,
+    id: string,
+    description: string,
+    eventPattern: cwe.EventPattern,
+    metricNamespace: string,
+    metricName: string,
+    alarmProps: {
+      evaluationPeriods: number;
+      datapointsToAlarm: number;
+      threshold: number;
+      alarmDescription: string;
+    },
+    topic: ITopic
+  ): void {
+    
+    // To call PutMetricData via AWS Lambda created by cdk of AwsApi construct
+    const target = new cwet.AwsApi({
+      action: 'PutMetricData',
+      service: 'CloudWatch',
+      parameters: {
+        MetricData: [
+          {
+            MetricName: metricName,
+            Dimensions: [
+              {
+                Name: "EventSource",
+                Value: "EventBridge",
+              },
+            ],
+            Unit: "None",
+            Value: 1.0,
+          },
+        ],
+        Namespace: metricNamespace,
+      }
+    });
+    
+    // Create EventBridge Rule
+    new cwe.Rule(scope, `${id}EventRule`, {
+      description: description,
+      enabled: true,
+      eventPattern: eventPattern,
+      targets: [target]
+    });
+    
+    // Create an Alarm that is based on metrics
+    new cw.Alarm(scope, `${id}Alarm`, {
+      metric: new cw.Metric({
+        namespace: metricNamespace,
+        metricName: metricName,
+        dimensionsMap: {
+          "EventSource": "EventBridge",
+        },
+      }),
+      evaluationPeriods: alarmProps.evaluationPeriods,
+      datapointsToAlarm: alarmProps.datapointsToAlarm,
+      threshold: alarmProps.threshold,
+      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      alarmDescription: alarmProps.alarmDescription,
+      actionsEnabled: true,
+    }).addAlarmAction(new cwa.SnsAction(topic));
+  }
+}
+
+class MetricStrategyFactory {
+  static createStrategy(scope: Construct, additionalTrail: boolean, cloudTrailLogGroupName?: string): MetricGenerationStrategy {
+    if (additionalTrail && cloudTrailLogGroupName) {
+      const logGroup = cwl.LogGroup.fromLogGroupName(
+        scope, 
+        'CloudTrailLogGroup', 
+        cloudTrailLogGroupName
+      );
+      return new CloudTrailMetricStrategy(logGroup);
+    } else {
+      return new EventBridgeMetricStrategy();
+    }
+  }
+}
+
 export interface DetectionProps {
   notifyEmail: string;
-  cloudTrailLogGroupName: string;
+  cloudTrailLogGroupName?: string;
+  additionalTrail?: boolean;
 }
 
 export class Detection extends Construct {
@@ -202,126 +513,7 @@ export class Detection extends Construct {
         },
       },
       targets: [new cwet.SnsTopic(topic)],
-    });
-
-    // LogGroup Construct for CloudTrail
-    //   Use LogGroup.fromLogGroupName() because...
-    //   On Control Tower environment, it created by not BLEA but Control Tower. So we need to refer existent LogGroup.
-    //   When you use BLEA Standalone version, the LogGroup is created by BLEA.
-    //
-    //   Note:
-    //     MetricFilter-based detection may delay for several minutes because of latency on CloudTrail Log delivery to CloudWatchLogs
-    //     Use CloudWatch Events if you can, it deliver CloudTrail event faster.
-    //     IAM event occur in us-east-1 region so if you want to detect it, you need to use MetrifFilter-based detection
-    //     See: https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-event-reference-aws-console-sign-in-events.html
-    //
-    const cloudTrailLogGroup = cwl.LogGroup.fromLogGroupName(this, 'CloudTrailLogGroup', props.cloudTrailLogGroupName);
-
-    // IAM Policy Change Notification
-    //  from NIST template
-    const mfIAMPolicyChange = new cwl.MetricFilter(this, 'IAMPolicyChangeFilter', {
-      logGroup: cloudTrailLogGroup,
-      filterPattern: {
-        logPatternString:
-          '{($.eventName=DeleteGroupPolicy)||($.eventName=DeleteRolePolicy)||($.eventName=DeleteUserPolicy)||($.eventName=PutGroupPolicy)||($.eventName=PutRolePolicy)||($.eventName=PutUserPolicy)||($.eventName=CreatePolicy)||($.eventName=DeletePolicy)||($.eventName=CreatePolicyVersion)||($.eventName=DeletePolicyVersion)||($.eventName=AttachRolePolicy)||($.eventName=DetachRolePolicy)||($.eventName=AttachUserPolicy)||($.eventName=DetachUserPolicy)||($.eventName=AttachGroupPolicy)||($.eventName=DetachGroupPolicy)}',
-      },
-      metricNamespace: 'CloudTrailMetrics',
-      metricName: 'IAMPolicyEventCount',
-      metricValue: '1',
-    });
-
-    new cw.Alarm(this, 'IAMPolicyChangeAlarm', {
-      metric: mfIAMPolicyChange.metric({
-        period: cdk.Duration.seconds(300),
-        statistic: cw.Stats.SUM,
-      }),
-      evaluationPeriods: 1,
-      datapointsToAlarm: 1,
-      threshold: 1,
-      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      alarmDescription: 'IAM Configuration changes detected!',
-      actionsEnabled: true,
-    }).addAlarmAction(new cwa.SnsAction(topic));
-
-    // Unauthorized Attempts
-    //  from NIST template
-    const unauthorizedAttemptsFilter = new cwl.MetricFilter(this, 'UnauthorizedAttemptsFilter', {
-      logGroup: cloudTrailLogGroup,
-      filterPattern: {
-        // Exclude calls “Decrypt" event by config.amazonaws.com to ignore innocuous errors caused by AWS Config.
-        // That error occurs if you have KMS (CMK) encrypted environment variables in Lambda function.
-        logPatternString:
-          '{($.errorCode = "*UnauthorizedOperation" || $.errorCode = "AccessDenied*") && ($.eventName != "Decrypt" || $.userIdentity.invokedBy != "config.amazonaws.com" )}',
-      },
-      metricNamespace: 'CloudTrailMetrics',
-      metricName: 'UnauthorizedAttemptsEventCount',
-      metricValue: '1',
-    });
-
-    new cw.Alarm(this, 'UnauthorizedAttemptsAlarm', {
-      metric: unauthorizedAttemptsFilter.metric({
-        period: cdk.Duration.seconds(300),
-        statistic: cw.Stats.SUM,
-      }),
-      evaluationPeriods: 1,
-      datapointsToAlarm: 1,
-      threshold: 5,
-      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      alarmDescription: 'Multiple unauthorized actions or logins attempted!',
-      actionsEnabled: true,
-    }).addAlarmAction(new cwa.SnsAction(topic));
-
-    // NewAccessKeyCreated
-    //  from NIST template
-    const newAccessKeyCreatedFilter = new cwl.MetricFilter(this, 'NewAccessKeyCreatedFilter', {
-      logGroup: cloudTrailLogGroup,
-      filterPattern: {
-        logPatternString: '{($.eventName=CreateAccessKey)}',
-      },
-      metricNamespace: 'CloudTrailMetrics',
-      metricName: 'NewAccessKeyCreatedEventCount',
-      metricValue: '1',
-    });
-
-    new cw.Alarm(this, 'NewAccessKeyCreatedAlarm', {
-      metric: newAccessKeyCreatedFilter.metric({
-        period: cdk.Duration.seconds(300),
-        statistic: cw.Stats.SUM,
-      }),
-      evaluationPeriods: 1,
-      datapointsToAlarm: 1,
-      threshold: 1,
-      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      alarmDescription: 'Warning: New IAM access Eey was created. Please be sure this action was neccessary.',
-      actionsEnabled: true,
-    }).addAlarmAction(new cwa.SnsAction(topic));
-
-    // Detect Root Activity from CloudTrail Log (For SecurityHub CIS 1.1)
-    // See: https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-cis-controls.html#securityhub-standards-cis-controls-1.1
-    // See: https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudwatch-alarms-for-cloudtrail-additional-examples.html
-    const rootUserActivityFilter = new cwl.MetricFilter(this, 'RootUserActivityFilter', {
-      logGroup: cloudTrailLogGroup,
-      filterPattern: {
-        logPatternString:
-          '{$.userIdentity.type="Root" && $.userIdentity.invokedBy NOT EXISTS && $.eventType !="AwsServiceEvent"}',
-      },
-      metricNamespace: 'CloudTrailMetrics',
-      metricName: 'RootUserPolicyEventCount',
-      metricValue: '1',
-    });
-
-    new cw.Alarm(this, 'RootUserActivityAlarm', {
-      metric: rootUserActivityFilter.metric({
-        period: cdk.Duration.seconds(300),
-        statistic: cw.Stats.SUM,
-      }),
-      evaluationPeriods: 1,
-      datapointsToAlarm: 1,
-      threshold: 1,
-      comparisonOperator: cw.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-      alarmDescription: 'Root user activity detected!',
-      actionsEnabled: true,
-    }).addAlarmAction(new cwa.SnsAction(topic));
+    }); 
 
     // ------------------- Other security services integration ----------------------
 
@@ -375,5 +567,16 @@ export class Detection extends Construct {
       },
       targets: [new cwet.SnsTopic(topic)],
     });
+
+    // additionalTrailに基づいて戦略を選択し、メトリクスとアラームを作成
+    const additionalTrail = props.additionalTrail !== undefined ? props.additionalTrail : true;
+    const metricStrategy = MetricStrategyFactory.createStrategy(
+      this,
+      additionalTrail,
+      props.cloudTrailLogGroupName
+    );
+    
+    // 選択された戦略を使用してメトリクスとアラームを作成
+    metricStrategy.createMetricsAndAlarms(this, topic);
   }
 }

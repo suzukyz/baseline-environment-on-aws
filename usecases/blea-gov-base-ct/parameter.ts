@@ -6,6 +6,7 @@ export interface AppParameter {
   securityNotifyEmail: string;
   securitySlackWorkspaceId?: string; // required if deploy via CLI
   securitySlackChannelId?: string; // required if deploy via CLI
+  additionalTrail?: boolean; // Default is true, true is creating another trail apart from a trail made by Control Tower
 }
 
 export interface PipelineParameter {

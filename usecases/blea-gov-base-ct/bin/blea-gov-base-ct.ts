@@ -22,4 +22,5 @@ new BLEAGovBaseCtStack(app, 'Dev-BLEAGovBaseCt', {
   securityNotifyEmail: devParameter.securityNotifyEmail,
   securitySlackWorkspaceId: devParameter.securitySlackWorkspaceId,
   securitySlackChannelId: devParameter.securitySlackChannelId,
+  additionalTrail: devParameter.additionalTrail ? devParameter.additionalTrail : true
 });
