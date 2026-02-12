@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## 1.0.0 (2025-10-08)
+
+
+### Features
+
+* add release-please automation for GitHub releases ([fea86cd](https://github.com/suzukyz/baseline-environment-on-aws/commit/fea86cd19c2320d354efaef8565524831adb737a))
+* dealing with issue [#1139](https://github.com/suzukyz/baseline-environment-on-aws/issues/1139);  add Critical to GuardDutyFindings alert ([#1140](https://github.com/suzukyz/baseline-environment-on-aws/issues/1140)) ([0c2e83c](https://github.com/suzukyz/baseline-environment-on-aws/commit/0c2e83ca53f4a11273f327e6bb7462b87cca2be5))
+* **ecs-app:** use stable synthetics module ([#503](https://github.com/suzukyz/baseline-environment-on-aws/issues/503)) ([448ac6b](https://github.com/suzukyz/baseline-environment-on-aws/commit/448ac6bccaba8dd2ea8961849f8e2daf71283794))
+* migrate from depcheck to knip ([#924](https://github.com/suzukyz/baseline-environment-on-aws/issues/924)) ([4246e6a](https://github.com/suzukyz/baseline-environment-on-aws/commit/4246e6aa83f367908ff4c6fecaff602d9a757ac0))
+* migrate from standard-version to release-please ([534b98e](https://github.com/suzukyz/baseline-environment-on-aws/commit/534b98e32f91a6e535dbbeca24b4997c4fcc6ea5))
+* migrate to Node.js 22 ([#1220](https://github.com/suzukyz/baseline-environment-on-aws/issues/1220)) ([777d645](https://github.com/suzukyz/baseline-environment-on-aws/commit/777d645948967fe99f76593d4124cc3b76d89b74))
+
+
+### Bug Fixes
+
+* **blea-guest-serverless-api-sample:** lambda runtime version and snapshot update ([#784](https://github.com/suzukyz/baseline-environment-on-aws/issues/784)) ([7831a9e](https://github.com/suzukyz/baseline-environment-on-aws/commit/7831a9ec1466c929f924d531b8c9ef86568a8a00))
+* deprecated code, RDS's instanceProps and CloudWatch Synthetics's older runtime ([#662](https://github.com/suzukyz/baseline-environment-on-aws/issues/662)) ([73342d0](https://github.com/suzukyz/baseline-environment-on-aws/commit/73342d0da1d4b386160a4a117f9dc7d41bb32b1c))
+* make public variable read only outside construct ([#824](https://github.com/suzukyz/baseline-environment-on-aws/issues/824)) ([fd79f6a](https://github.com/suzukyz/baseline-environment-on-aws/commit/fd79f6add92338679f9dc95e59ad209083316c63))
+* pin esbuild version to 0.21.x ([#815](https://github.com/suzukyz/baseline-environment-on-aws/issues/815)) ([2e51dca](https://github.com/suzukyz/baseline-environment-on-aws/commit/2e51dcafe36d471485984ce76ae770fb5c34ef16))
+* replace deprecated aws-portal:*Billing policy ([#583](https://github.com/suzukyz/baseline-environment-on-aws/issues/583)) ([d2a1300](https://github.com/suzukyz/baseline-environment-on-aws/commit/d2a1300c8b1fbfd4f502fca2d2a4b9f0733bd1d6))
+* replace managedPolicies object literals with ManagedPolicy.fromAwsManagedPolicyName ([#1218](https://github.com/suzukyz/baseline-environment-on-aws/issues/1218)) ([1698332](https://github.com/suzukyz/baseline-environment-on-aws/commit/16983327b4a2686610906444a9f13e5068fd9109))
+* rm eslint & prettier from ignoreDependencies in knip config ([#940](https://github.com/suzukyz/baseline-environment-on-aws/issues/940)) ([af60c49](https://github.com/suzukyz/baseline-environment-on-aws/commit/af60c494ed52865710fb3b1396665cd2e9fa27ab))
+
 ## [3.1.0](https://github.com/aws-samples/baseline-environment-on-aws/compare/v3.0.0...v3.1.0) (2025-10-07)
 
 
